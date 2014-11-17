@@ -180,6 +180,7 @@
         return c;
     }
 
+    // Transformar cuadrado para dibujar utilizando la matriz t
     // Utilización de coordenadas homogéneas
     cuad.prototype.transformar = function(t) {
         var v = multVM([this.p1.x,this.p1.y,1.0],t);
@@ -195,7 +196,7 @@
     }
 
     cuad.prototype.graf_cuad = function(o,at,c) {
-        var t1 = prod_matriz(o.t,at);
+        var t1 = prod_matriz(at,o.t); // !!
         var arr = this.transformar(t1);
         var p1 = {"x":arr[0],"y":arr[1]};
         var p2 = {"x":arr[2],"y":arr[3]};
@@ -223,8 +224,8 @@
 
     // Matrices de transformacion
     function rotar(alpha) {
-        return [[Math.cos(alpha),-Math.sin(alpha),0],
-                [Math.sin(alpha),Math.cos(alpha),0],
+        return [[Math.sin(alpha),Math.cos(alpha),0],
+                [Math.cos(alpha),-Math.sin(alpha),0],
                 [0,0,1]];
     }
 
@@ -250,41 +251,57 @@
 
         var id = [[1,0,0],[0,1,0],[0,0,1]];
 
-        // Matriz principal (representa la transformacion aplicada a toda la escena
+        // Matriz principal (representa la transformacion aplicada a toda la escena)
+        // es la ultima transformacion en aplicarse
         var mprinc = prod_matriz(rotar(rotarAng),prod_matriz(escalar(escalaX,escalaY),trasladar(trasladarX/**20*/,trasladarY/**20*/)));
 
-        var c1 = new cuad(new punto(-40,0),new punto(-40,100),new punto(40,100), new punto(40,0));
-        var c2 = new cuad(new punto(-30,90),new punto(-30,60),new punto(30,60), new punto(30,90));
-        var c3 = new cuad(new punto(-30,10),new punto(-30,40),new punto(30,40), new punto(30,10));
+        // CUADRADO - entidad base
+        var cuadrado = new cuad(new punto(-1,-1),new punto(1,-1),new punto(1,1), new punto(-1,1))
 
-        var ch1 = new cuad(new punto(-100,170),new punto(-100,200),new punto(-70,200), new punto(-70,170));
-        var ch2 = new cuad(new punto(-105,200),new punto(-105,220),new punto(-65,220), new punto(-65,200));
+        // PUERTA
+        var c1 = new objeto(prod_matriz(trasladar(-20,0),escalar(10,10)), cuadrado,'cuad')
+        var c2 = new objeto(prod_matriz(trasladar(10,0),escalar(10,10)),cuadrado,'cuad')
+        var c3 = new objeto(prod_matriz(trasladar(0,0),escalar(40,20)),cuadrado,'cuad')
 
-        var puerta = [new objeto(id,c1,'cuad'),new objeto(id,c2,'cuad'),new objeto(id,c3,'cuad')];
+        var puerta = [c1,c2,c3];
         
-        var techo = new cuad(new punto(-140,140),new punto(-100,170),new punto(100,170), new punto(140,140));
-        var chimenea = [new objeto(id,ch1,'cuad'),new objeto(id,ch2,'cuad')];
-        var pared = new cuad(new punto(-130,140),new punto(-130,0),new punto(130,0), new punto(130,140));
+        // TECHO - trapezoide
+        var techo = new cuad(new punto(140,-140),new punto(170,-100),new punto(170,100), new punto(140,140));
 
-        var casa = [new objeto(trasladar(-55,0),puerta,'lista'),new objeto(prod_matriz(trasladar(100,90),rotar(Math.PI/2)),puerta,'lista'),new objeto(id,techo,'cuad'),new objeto(id,pared,'cuad'),new objeto(id,chimenea,'lista'),new objeto(trasladar(60,0),chimenea,'lista')];
+        // PARED
+        var pared = new objeto(escalar(50,90),cuadrado,'cuad')
 
-        var escena;
+        // VENTANA
+        var ventana = new objeto(prod_matriz(trasladar(20,40),escalar(20,30)),cuadrado,'cuad')
 
+        // CASA: PARED + TECHO + PUERTA + VENTANA
+        var casa = [new objeto(trasladar(-10,-40),puerta,'lista'),
+                    new objeto(trasladar(-90,0),techo,'cuad'),
+                    pared,ventana];
+
+        // Escena compuesta por 2 casas, una trasladada
+        var casas = [new objeto(trasladar(-140,0),casa,'lista'),
+                      new objeto(id,casa,'lista')];
+
+        var escena = new objeto(id,casas,'lista');
+
+        // COLORES (ninguna utilidad :))
         var jscolor1 = document.getElementById('color1');
         var c1 = [parseFloat(jscolor1.color.rgb[0]),
               parseFloat(jscolor1.color.rgb[1]),
               parseFloat(jscolor1.color.rgb[2])];
 
 
-        var casas = [new objeto(trasladar(0,-250),casa,'lista'),new objeto(trasladar(0,0),casa,'lista')];
-        var escena = new objeto(id,casas,'lista');
+        // Computar la escena
         escena.graf_obj(mprinc,c1);
 
         initBuffers();
+
+        // dibujarla (Pasar a OpenGL)
         dibujarEscena();
     }
 
-    // Volver a cero los parametros del 
+    // Volver a cero los parametros
     function reset() {;
         escalaX = 1;
         escalaY = 1;
@@ -312,16 +329,15 @@
     <input id="reset" type="button" value="Reset" onclick="reset();"/><br/>
     Colores <input id="color1" class="color" value="C7BBAC" size=5 onchange="calc();"><br/>
 
-    <input type="button" value=">" onclick="numEsc++; numEsc%=esc.length; document.getElementById('escena').innerHTML=esc[numEsc]; calc();"/>Escena: <span id="escena">Casa</span> <br/>
     <input id="escalaXmenos" type="button" value="<" onclick="escalaX-=0.1; document.getElementById('escalaX').innerHTML=escalaX.toFixed(2); calc();"/>
     <input id="escalaXmas" type="button" value=">" onclick="escalaX+=0.1; document.getElementById('escalaX').innerHTML=escalaX.toFixed(2); calc();"/>Escala X <span id="escalaX" >1.00</span><br/>
     <input id="escalaYmenos" type="button" value="<" onclick="escalaY-=0.1; document.getElementById('escalaY').innerHTML=escalaY.toFixed(2); calc();"/>
     <input id="escalaYmas" type="button" value=">" onclick="escalaY+=0.1; document.getElementById('escalaY').innerHTML=escalaY.toFixed(2); calc();"/>Escala Y <span id="escalaY" >1.00</span><br/>
 
-    <input id="trasladarXmenos" type="button" value="<" onclick="trasladarX-=0.5; document.getElementById('trasladarX').innerHTML=trasladarX.toFixed(2); calc();"/>
-    <input id="trasladarXmas" type="button" value=">" onclick="trasladarX+=0.5; document.getElementById('trasladarX').innerHTML=trasladarX.toFixed(2); calc();"/>Trasladar X <span id="trasladarX" >1.00</span><br/>
-    <input id="trasladarYmenos" type="button" value="<" onclick="trasladarY-=0.5; document.getElementById('trasladarY').innerHTML=trasladarY.toFixed(2); calc();"/>
-    <input id="trasladarYmas" type="button" value=">" onclick="trasladarY+=0.5; document.getElementById('trasladarY').innerHTML=trasladarY.toFixed(2); calc();"/>Trasladar Y <span id="trasladarY" >1.00</span><br/>
+    <input id="trasladarXmenos" type="button" value="<" onclick="trasladarX-=5; document.getElementById('trasladarX').innerHTML=trasladarX.toFixed(2); calc();"/>
+    <input id="trasladarXmas" type="button" value=">" onclick="trasladarX+=5; document.getElementById('trasladarX').innerHTML=trasladarX.toFixed(2); calc();"/>Trasladar X <span id="trasladarX" >1.00</span><br/>
+    <input id="trasladarYmenos" type="button" value="<" onclick="trasladarY-=5; document.getElementById('trasladarY').innerHTML=trasladarY.toFixed(2); calc();"/>
+    <input id="trasladarYmas" type="button" value=">" onclick="trasladarY+=5; document.getElementById('trasladarY').innerHTML=trasladarY.toFixed(2); calc();"/>Trasladar Y <span id="trasladarY" >1.00</span><br/>
 
     <input id="rotarYmenos" type="button" value="<" onclick="rotarAng-=0.1; document.getElementById('rotar').innerHTML=rotarAng.toFixed(2); calc();"/>
     <input id="rotarYmas" type="button" value=">" onclick="rotarAng+=0.1; document.getElementById('rotar').innerHTML=rotarAng.toFixed(2); calc();"/>Rotar <span id="rotar" >0.0</span><br/>

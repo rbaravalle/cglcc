@@ -1,0 +1,472 @@
+
+
+<html> 
+ 
+<head> 
+<title>Pr&aacute;ctico 1</title> 
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1"> 
+ 
+<script type="text/javascript" src="shaders3.js"></script> 
+<script type="text/javascript" src="jscolor/jscolor.js"></script>
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<!-- Shaders - ignorar en esta leccion -->
+<script id="shader-fs" type="x-shader/x-fragment"> 
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    varying vec4 vColor;
+    varying vec4 vPosition;
+ 
+    void main(void) {
+        gl_FragColor = vec4(vColor.rgb,vColor.a);
+    }
+</script> 
+ 
+<script id="shader-vs" type="x-shader/x-vertex"> 
+    attribute vec3 aVertexPosition;
+    attribute vec3 aVertexColor;
+
+    varying vec4 vColor;
+    varying vec4 vPosition;
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+ 
+    void main(void) {
+        vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        vColor = vec4(aVertexColor,1.0);
+    }
+</script>
+<!-- Shaders - ignorar en esta leccion -->
+ 
+<script type="text/javascript"> 
+
+    var gl;
+
+    var pointsBuffer;
+    var points;
+    var colorsBuffer;
+    var colors;
+    var maxcoord = 256;
+    var escalaX = 1;
+    var escalaY = 1;
+    var trasladarX = 0;
+    var trasladarY = 0;
+    var trasladarZ = -20;
+    var ptosControl;
+    var paso = 10;
+    var ang1 = 0;
+    var ang2 = 0;
+
+    // En esta lección utilizamos mat4 como librería de matrices
+    // Tambien dejamos que OpenGL se haga cargo de la construccion
+    // de la matriz de proyeccion
+    var pMatrix = mat4.create();
+    var mvMatrix = mat4.create();
+    var currentlyPressedKeys = {};
+    var pos = [0.0,0.0,-50.0];
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+            alert("No es posible inicializar WebGL");
+        }
+    }
+
+    function initBuffers() {
+        pointsBuffer = gl.createBuffer();
+        colorsBuffer = gl.createBuffer();
+
+        // se asocian estos vertices con el buffer triangleVertexPositionBuffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorsBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+    }
+ 
+ 
+    function dibujarEscena() {
+        // color de fondo de la escena (negro)
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Matriz perspectiva
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+        mat4.identity(mvMatrix);
+
+        mat4.translate(mvMatrix, [trasladarX, trasladarY, trasladarZ]);
+        mat4.rotate(mvMatrix, degToRad(ang1), [0, 1, 0]);
+        mat4.rotate(mvMatrix, degToRad(ang2), [1, 0, 0]);
+
+        // Windowing: se dibuja en este viewport (subconjunto del espacio)
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+
+        // se establece pointsBuffer como el buffer actual
+        gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
+
+        // por lo tanto se le aplica la siguiente operacion al mismo.
+        // Establece un vinculo entre el buffer y "shaderProgram.vertexPositionAttribute"
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorsBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+        // Pasamos las matrices de proyeccion, modelo y view
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+
+
+        // Dibujamos líneas
+        gl.drawArrays(gl.LINES, 0, points.length/3);
+    } 
+
+    // simulacion de buffers
+    function initVariables() {
+        points = [];
+        colors = [];
+        var z;
+    }
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+
+    // entre 0 y maxcoord
+    function putpixel(x,y,z,c) {
+        points.push(x,y,z);
+        if(c) {
+            colors.push(c[0],c[1],c[2],1.0);
+        }
+        else {
+            colors.push(1.0,1.0,1.0,1.0);
+        }
+    }
+
+    function linea(p1,p2,c) {
+        // nativo
+        putpixel(p1.x,p1.y,p1.z,c);
+        putpixel(p2.x,p2.y,p2.z,c);
+    }
+
+    function fact(n,i,u) {
+        var num = 1;
+        var den = 1;
+        var m = Math.pow(u,i)*Math.pow(1-u,n-i);
+        if(n==0 || i == 0) return m;
+        for(var j = 1; j <= i; j++) {
+            den*=j;
+        }
+        for(var j = n; j >= n-i+1; j--) {
+            num*=j;
+        }
+        return (num/den)*m;
+    }
+
+
+    function factD(n,i,u) {
+        var num = 1;
+        var den = 1;
+        var m = i*Math.pow(u,i-1)*Math.pow(1-u,n-i)+ 
+                  Math.pow(u,i)*(n-i)*Math.pow((1-u),n-i-1);
+        if(n==0 || i == 0) return m;
+        for(var j = 1; j <= i; j++) {
+            den*=j;
+        }
+        for(var j = n; j >= n-i+1; j--) {
+            num*=j;
+        }
+        return (num/den)*m;
+    }
+
+ 
+    function punto(x,y,z,c) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.c = c;
+    }
+
+    function cubo(p1,p2,p3,p4,p5,p6,p7,p8) {
+        this.p1 = p1;
+        this.p2 = p2;
+        this.p3 = p3;
+        this.p4 = p4;
+        this.p5 = p5;
+        this.p6 = p6;
+        this.p7 = p7;
+        this.p8 = p8;
+    }
+
+    function objeto(t,e,tipo) {
+        this.t = t;
+        this.e = e;
+        this.tipo = tipo;
+    }
+
+    function defi(o) {
+        this.o = o;
+    }
+
+    function prod_matriz3D(a,b) {
+        var c = [];
+        for(i=0;i<=3;i++) {
+            c[i] = [];
+            for(j=0;j<=3;j++){
+                c[i][j]=0;
+                for(k=0;k<=3;k++)
+                   c[i][j] += a[i][k]*b[k][j];
+            }
+        }
+        return c;
+    }
+
+    function multVM3D(v,t) {
+        var c = [];
+        for(var j=0;j<=3;j++) {
+            c[j] = 0;
+            for(var k=0;k<=3;k++)
+               c[j] += v[k]*t[j][k];
+        }
+        return c;
+    }
+
+    cubo.prototype.transformar3D = function(t) {
+        var res = [];
+        var v = multVM3D([this.p1.x,this.p1.y,this.p1.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p2.x,this.p2.y,this.p2.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p3.x,this.p3.y,this.p3.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p4.x,this.p4.y,this.p4.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p5.x,this.p5.y,this.p5.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p6.x,this.p6.y,this.p6.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p7.x,this.p7.y,this.p7.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        v = multVM3D([this.p8.x,this.p8.y,this.p8.z,1.0],t);
+        res.push(v[0],v[1],v[2])
+        return res;
+    }
+
+    cubo.prototype.graf_cubo = function(o,at,c) {
+        var t1 = prod_matriz3D(at,o.t);
+        var arr = [];
+
+        arr = this.transformar3D(t1);
+
+        var p1 = {"x":arr[0],"y":arr[1],"z":arr[2]};
+        var p2 = {"x":arr[3],"y":arr[4],"z":arr[5]};
+        var p3 = {"x":arr[6],"y":arr[7],"z":arr[8]};
+        var p4 = {"x":arr[9],"y":arr[10],"z":arr[11]};
+        var p5 = {"x":arr[12],"y":arr[13],"z":arr[14]};
+        var p6 = {"x":arr[15],"y":arr[16],"z":arr[17]};
+        var p7 = {"x":arr[18],"y":arr[19],"z":arr[20]};
+        var p8 = {"x":arr[21],"y":arr[22],"z":arr[23]};
+
+
+        linea(p1,p2,c);
+        linea(p2,p6,c);
+        linea(p6,p5,c);
+        linea(p5,p1,c);
+
+
+        linea(p3,p4,c);
+        linea(p4,p8,c);
+        linea(p8,p7,c);
+        linea(p7,p3,c);
+
+        linea(p2,p4,c);
+        linea(p6,p8,c);
+        linea(p5,p7,c);
+        linea(p1,p3,c);
+    }
+
+    objeto.prototype.graf_obj = function(t,c) {
+        if(this.tipo == 'cubo') {
+            this.e.graf_cubo(this,t,c);
+        }
+        else {
+            var t1 = prod_matriz3D(t,this.t);
+            for(var i = 0; i < this.e.length; i++) {
+                this.e[i].graf_obj(t1,c);
+            }
+        }
+    }
+
+    function rotarX3D(alpha) {
+        return [
+                [1,0,0,0],
+                [0,Math.cos(alpha),-Math.sin(alpha),0],
+                [0,Math.sin(alpha),Math.cos(alpha),0],
+                [0,0,0,1]];
+    }
+
+    function rotarY3D(alpha) {
+        return [
+                [Math.cos(alpha),0,-Math.sin(alpha),0],
+                [0,1,0,0],
+                [Math.sin(alpha),0,Math.cos(alpha),0],
+                [0,0,0,1]];
+    }
+
+    function rotarZ3D(alpha) {
+        return [
+                [Math.cos(alpha),-Math.sin(alpha),0,0],
+                [Math.sin(alpha),Math.cos(alpha),0,0],
+                [0,0,1,0],
+                [0,0,0,1]];
+    }
+
+    function trasladar3D(x,y,z) {
+        return [[1,0,0,x],[0,1,0,y],[0,0,1,z],[0,0,0,1]];
+    }
+
+    function escalar3D(tx,ty,tz) {
+        return [[tx,0,0,0],[0,ty,0,0],[0,0,tz,0],[0,0,0,1]];
+    }
+
+    function reset() {;
+        trasladarX = 0;
+        trasladarY = 0;
+        trasladarZ = -20;
+        ang1 = 0;
+        ang2 = -40;
+
+        calc();
+    }
+
+    function handleKeyDown(event) {
+        currentlyPressedKeys[event.keyCode] = true;
+
+        if (String.fromCharCode(event.keyCode) == "A") {
+            ang1+=5;
+        }
+        if (String.fromCharCode(event.keyCode) == "D") {
+            ang1-=5;
+        }
+        if (String.fromCharCode(event.keyCode) == "S") {
+            ang2-=5;
+        }
+        if (String.fromCharCode(event.keyCode) == "W") {
+            ang2+=5;
+        }
+
+        if (currentlyPressedKeys[38]) {
+          // Up cursor key
+          trasladarZ += 0.5;
+        }
+        if (currentlyPressedKeys[40]) {
+          // Down cursor key
+          trasladarZ -= 0.5;
+        }
+
+        if (currentlyPressedKeys[37]) { // left
+          trasladarX -= 0.5;
+        }
+        if (currentlyPressedKeys[39]) { // right
+          trasladarX += 0.5;
+        }
+
+        if (currentlyPressedKeys[33]) { // Page Up
+          trasladarY+=0.1;
+        } else if (currentlyPressedKeys[34]) {
+          trasladarY-=0.1;
+        }
+
+        calc();
+     }
+
+     function handleKeyUp(event) {
+       currentlyPressedKeys[event.keyCode] = false;
+       calc();
+     }
+
+ 
+    function calc() {
+        // se obtiene el objeto canvas del codigo html (como un objeto javascript)
+        var canvas = document.getElementById("canvas");
+
+        // inicializaciones
+        initGL(canvas);
+        initShaders(gl);
+        initVariables();
+
+        var id = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+
+        var escena;
+
+        var jscolor = document.getElementById('color1');
+        var c1 = [parseFloat(jscolor.color.rgb[0]),
+              parseFloat(jscolor.color.rgb[1]),
+              parseFloat(jscolor.color.rgb[2])];
+
+        var esca = 1;
+        var cubo1 = new cubo(new punto(-esca,-esca,-esca),new punto(-esca,esca,-esca),
+                             new punto(-esca,-esca,esca), new punto(-esca,esca,esca),
+                             new punto(esca,-esca,-esca), new punto(esca,esca,-esca),
+                             new punto(esca,-esca,esca), new punto(esca,esca,esca));
+
+        var cuboO = new objeto(id,cubo1,'cubo');
+        var o = [ new objeto(trasladar3D(1.0,4.0,0.0),[cuboO],'lista'),
+                 new objeto(trasladar3D(1.0,-4.0,0.0),[cuboO],'lista')
+                ];
+
+        var esc = new objeto(prod_matriz3D(trasladar3D(0.0,0.0,-0.0),escalar3D(0.5,0.5,2)),o,'lista');
+        var esc2 = new objeto(trasladar3D(6.0,2,-1.5),[esc],'lista');
+        var esc3 = new objeto(trasladar3D(-2.0,2.0,-1.5),[esc],'lista');
+        var union = new objeto(prod_matriz3D(trasladar3D(2.0,2.0,1.0),escalar3D(6,4,0.5)),[cuboO],'lista');
+
+        var e = new objeto(id,[esc2,esc3,union],'lista');
+        e.graf_obj(id,c1);
+
+        document.getElementById('posX').innerHTML = trasladarX.toFixed(2);
+        document.getElementById('posY').innerHTML = trasladarY.toFixed(2);
+        document.getElementById('posZ').innerHTML = trasladarZ.toFixed(2);
+        
+        initBuffers();
+        dibujarEscena();
+    }
+ 
+ </script> 
+</head> 
+ 
+ 
+<body onload="document.onkeyup = handleKeyUp; document.onkeydown = handleKeyDown; calc();"> 
+    <div style="text-align:center; font-size:30px">Computaci&oacute;n Gr&aacute;fica 3D</div>
+    
+    Intento de representaci&oacute;n de una mesa<br/>
+    <canvas id="canvas" width="800" height="800" style="float:left"></canvas>  
+    <input id="reset" type="button" value="Reset" onclick="reset();"/><br/>
+    Color <input id="color1" class="color" value="FCFCFC" size=5 onchange="calc();">
+    <br/>
+
+    <br/>
+
+    <span id="posX" >0.0</span> | <span id="posY" >0.0</span> | <span id="posZ" >-20.0</span> Posici&oacute;n Observador (X,Y,Z)<br/>
+
+    <input type="button" value="Recalcular" onclick="calc();" />
+
+    <br/>
+    <br/>
+    <span id="instr">
+    Instrucciones:<br/>
+    Flecha izquierda, derecha: desplazamiento X <br/>
+    pageUp, pageDown: desplazamiento Y <br/>
+    Flecha arriba, abajo: desplazamiento Z <br/>
+    A,S,W,D: rotar el modelo
+    </span>
+
+</body> 
+ 
+</html> 
+
